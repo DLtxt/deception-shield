@@ -1,0 +1,6 @@
+---
+- name: restart tpot
+  ansible.builtin.systemd:
+    name: tpot
+    state: restarted
+  failed_when: false

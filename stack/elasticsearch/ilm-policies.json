@@ -1,0 +1,52 @@
+{
+  "deception-pcap-policy": {
+    "policy": {
+      "_meta": {
+        "description": "Payload records are bulky. Roll over quickly, compress early, delete at 90 days."
+      },
+      "phases": {
+        "hot": {
+          "actions": {
+            "rollover": { "max_primary_shard_size": "20gb", "max_age": "1d" },
+            "set_priority": { "priority": 100 }
+          }
+        },
+        "warm": {
+          "min_age": "3d",
+          "actions": {
+            "forcemerge": { "max_num_segments": 1 },
+            "shrink": { "number_of_shards": 1 },
+            "set_priority": { "priority": 50 }
+          }
+        },
+        "delete": {
+          "min_age": "90d",
+          "actions": { "delete": {} }
+        }
+      }
+    }
+  },
+  "deception-events-policy": {
+    "policy": {
+      "_meta": {
+        "description": "Session events and alerts are small and worth keeping for a year."
+      },
+      "phases": {
+        "hot": {
+          "actions": {
+            "rollover": { "max_primary_shard_size": "10gb", "max_age": "7d" },
+            "set_priority": { "priority": 100 }
+          }
+        },
+        "warm": {
+          "min_age": "30d",
+          "actions": { "forcemerge": { "max_num_segments": 1 }, "set_priority": { "priority": 50 } }
+        },
+        "delete": {
+          "min_age": "365d",
+          "actions": { "delete": {} }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Copy to terraform.tfvars and edit before the first apply.
+
+aws_region   = "us-east-1"
+environment  = "prod"
+sensor_count = 1
+
+# T-Pot runs roughly twenty containers plus Elasticsearch. t3.large is the
+# working floor; t3.xlarge gives Elasticsearch room once indices grow.
+instance_type    = "t3.large"
+data_volume_size = 256
+
+# Networks allowed to reach SSH on 64295, the web interface on 64297 and
+# Cockpit on 64294. Narrow this to your own address.
+admin_cidr_blocks = ["203.0.113.4/32"]
+
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... operator@workstation"
+
+pcap_retention_days  = 30
+pcap_expiration_days = 365
+enable_flow_logs     = true

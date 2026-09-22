@@ -1,0 +1,10 @@
+# Copy to inventory.ini. `terraform output -raw ansible_inventory` prints this
+# block already filled in for the deployed sensors.
+
+[sensors]
+deception-shield-prod-sensor-0 ansible_host=203.0.113.10 ansible_port=64295 ansible_user=ubuntu sensor_id=deception-shield-prod-0
+
+[sensors:vars]
+capture_bucket=deception-shield-prod-captures-a1b2c3d4
+aws_region=us-east-1
+capture_interface=ens5

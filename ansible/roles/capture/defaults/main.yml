@@ -1,0 +1,7 @@
+---
+capture_dir: /data/pcap
+extracted_dir: /data/extracted
+rotate_seconds: 900
+rotate_size_mb: 256
+ring_size: 512
+deception_root: /opt/deception-shield

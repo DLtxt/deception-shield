@@ -1,0 +1,5 @@
+# Custom grok patterns for honeypot telemetry.
+CREDENTIAL_PAIR %{NOTSPACE:username}/%{NOTSPACE:password}
+SHELL_COMMAND (?<shell_command>[^\n]{1,4096})
+BASE64_BLOB (?<b64_blob>(?:[A-Za-z0-9+/]{40,}={0,2}))
+URL_IN_TEXT (?<embedded_url>(?:https?|ftp|tftp)://[^\s'"<>\\]{4,512})

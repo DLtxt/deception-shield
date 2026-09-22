@@ -1,0 +1,30 @@
+[Unit]
+Description=Deception Shield capture extraction and analysis
+Documentation=https://github.com/DLtxt/deception-shield
+After=deception-capture.service docker.service
+Wants=deception-capture.service
+
+[Service]
+Type=exec
+EnvironmentFile=-/etc/deception-shield/sensor.env
+ExecStart=/opt/deception-shield/venv/bin/python -m deception_shield.extractor
+Restart=always
+RestartSec=30
+
+User=extractor
+Group=extractor
+
+# Dissection is pure file work: no raw sockets, no privilege.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/pcap /data/extracted
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictNamespaces=true
+MemoryMax=2G
+CPUQuota=150%
+
+[Install]
+WantedBy=multi-user.target

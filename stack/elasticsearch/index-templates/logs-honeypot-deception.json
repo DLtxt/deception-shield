@@ -1,0 +1,82 @@
+{
+  "index_patterns": ["logs-honeypot-deception*", "logs-suricata-deception*"],
+  "data_stream": {},
+  "priority": 500,
+  "_meta": {
+    "description": "Honeypot session events and IDS verdicts",
+    "managed_by": "deception-shield"
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "10s",
+      "index.lifecycle.name": "deception-events-policy"
+    },
+    "mappings": {
+      "dynamic": "true",
+      "dynamic_templates": [
+        {
+          "strings_as_keyword": {
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 1024 }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "event": {
+          "properties": {
+            "id":         { "type": "keyword" },
+            "kind":       { "type": "keyword" },
+            "module":     { "type": "keyword" },
+            "dataset":    { "type": "keyword" },
+            "category":   { "type": "keyword" },
+            "outcome":    { "type": "keyword" },
+            "severity":   { "type": "integer" },
+            "risk_score": { "type": "integer" }
+          }
+        },
+        "source": {
+          "properties": {
+            "ip":   { "type": "ip" },
+            "port": { "type": "integer" },
+            "geo":  { "properties": { "location": { "type": "geo_point" }, "country_name": { "type": "keyword" } } }
+          }
+        },
+        "destination": {
+          "properties": { "ip": { "type": "ip" }, "port": { "type": "integer" } }
+        },
+        "user": {
+          "properties": {
+            "name":     { "type": "keyword" },
+            "password": { "type": "keyword" }
+          }
+        },
+        "process": {
+          "properties": {
+            "command_line": {
+              "type": "text",
+              "fields": { "keyword": { "type": "keyword", "ignore_above": 1024 } }
+            }
+          }
+        },
+        "rule": {
+          "properties": {
+            "id":       { "type": "keyword" },
+            "name":     { "type": "keyword" },
+            "category": { "type": "keyword" }
+          }
+        },
+        "file": {
+          "properties": {
+            "path": { "type": "keyword" },
+            "hash": { "properties": { "sha256": { "type": "keyword" } } }
+          }
+        },
+        "session": { "properties": { "id": { "type": "keyword" } } },
+        "observer": { "properties": { "name": { "type": "keyword" }, "type": { "type": "keyword" } } }
+      }
+    }
+  }
+}

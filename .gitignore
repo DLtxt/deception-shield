@@ -23,3 +23,34 @@ service-account*.json
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Infrastructure state. Terraform state routinely contains resolved secret
+# values in plaintext, and tfvars carries the operator networks and key.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+tfplan
+terraform.tfvars
+*.auto.tfvars
+
+# Deployment specifics: real sensor addresses.
+ansible/inventory.ini
+
+# Captured attack traffic. Payloads are live malicious content and are
+# archived to S3, never to the repository.
+captures/
+data/
+*.pcap
+*.pcap.gz
+
+# Python build artefacts
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/

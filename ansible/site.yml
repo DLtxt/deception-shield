@@ -1,0 +1,53 @@
+---
+# Configures deployed sensors into their running state.
+#
+# cloud-init handles first boot: disks, packages and the T-Pot install. This
+# playbook owns everything that changes afterwards, so it is safe to re-run and
+# is the mechanism for rolling out pipeline changes.
+
+- name: Configure honeypot sensors
+  hosts: sensors
+  become: true
+  gather_facts: true
+
+  vars:
+    deception_root: /opt/deception-shield
+    capture_dir: /data/pcap
+    extracted_dir: /data/extracted
+
+  pre_tasks:
+    - name: Confirm the data volume is mounted
+      ansible.builtin.assert:
+        that:
+          - ansible_mounts | selectattr('mount', 'equalto', '/data') | list | length > 0
+        fail_msg: >-
+          /data is not mounted. The sensor stores captures and Elasticsearch
+          indices there; check that the EBS volume attached and that
+          prepare-data-volume.sh ran at first boot.
+        success_msg: data volume present
+
+    - name: Confirm there is room for captures
+      ansible.builtin.assert:
+        that:
+          - (ansible_mounts | selectattr('mount', 'equalto', '/data') | first).size_available > 21474836480
+        fail_msg: /data has less than 20 GiB free; captures will stall.
+
+  roles:
+    - role: common
+      tags: [common]
+    - role: docker
+      tags: [docker]
+    - role: tpot
+      tags: [tpot]
+    - role: capture
+      tags: [capture]
+    - role: elk
+      tags: [elk]
+
+  post_tasks:
+    - name: Report the sensor endpoints
+      ansible.builtin.debug:
+        msg:
+          - "sensor        {{ sensor_id | default(inventory_hostname) }}"
+          - "web interface https://{{ ansible_host }}:64297"
+          - "management    ssh -p 64295 {{ ansible_user }}@{{ ansible_host }}"

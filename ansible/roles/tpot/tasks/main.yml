@@ -1,0 +1,52 @@
+---
+# T-Pot is installed by cloud-init at first boot. This role owns the parts that
+# change afterwards: which honeypots are enabled, and the credentials fronting
+# the web interface.
+
+- name: Check whether T-Pot is installed
+  ansible.builtin.stat:
+    path: /opt/tpot/docker-compose.yml
+  register: tpot_install
+
+- name: Fail clearly when the first boot install has not completed
+  ansible.builtin.assert:
+    that: tpot_install.stat.exists
+    fail_msg: >-
+      T-Pot is not installed at /opt/tpot. Check /var/log/tpot-install.log on the
+      sensor; the cloud-init install runs once at first boot and takes 15 to 20
+      minutes on a t3.large.
+
+- name: Read the enabled honeypot profile
+  ansible.builtin.slurp:
+    src: /opt/tpot/.env
+  register: tpot_env
+  failed_when: false
+
+- name: Ensure the T-Pot service is enabled
+  ansible.builtin.systemd:
+    name: tpot
+    enabled: true
+    state: started
+  failed_when: false
+
+- name: Install the web interface credentials
+  ansible.builtin.copy:
+    dest: /opt/tpot/data/nginx/conf/nginxpasswd
+    content: "{{ tpot_web_htpasswd }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: tpot_web_htpasswd is defined
+  no_log: true
+  notify: restart tpot
+
+- name: Wait for the T-Pot web interface to answer
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:64297"
+    validate_certs: false
+    status_code: [200, 401]
+  register: tpot_web
+  until: tpot_web.status in [200, 401]
+  retries: 30
+  delay: 20
+  failed_when: false

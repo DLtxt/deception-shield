@@ -1,0 +1,85 @@
+---
+- name: Install the capture script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../capture/capture.sh"
+    dest: /usr/local/bin/capture.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: restart capture
+
+- name: Create the analysis virtualenv
+  ansible.builtin.command:
+    cmd: python3 -m venv {{ deception_root }}/venv
+    creates: "{{ deception_root }}/venv/bin/python"
+
+- name: Copy the analysis package
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../analysis/"
+    dest: "{{ deception_root }}/analysis/"
+    delete: true
+    rsync_opts:
+      - "--exclude=.venv"
+      - "--exclude=__pycache__"
+      - "--exclude=.pytest_cache"
+      - "--exclude=*.egg-info"
+  notify: restart extractor
+
+- name: Install the analysis package into the virtualenv
+  ansible.builtin.pip:
+    name:
+      - "{{ deception_root }}/analysis"
+      - boto3
+    virtualenv: "{{ deception_root }}/venv"
+    state: forcereinstall
+  notify: restart extractor
+
+- name: Allow the extractor to read captures
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: extractor
+    mode: "0775"
+  loop:
+    - "{{ capture_dir }}"
+
+- name: Install the systemd units
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../capture/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - deception-capture.service
+    - deception-extractor.service
+  notify:
+    - reload systemd
+    - restart capture
+    - restart extractor
+
+- name: Enable and start the capture services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - deception-capture
+    - deception-extractor
+
+- name: Verify tcpdump is writing captures
+  ansible.builtin.shell:
+    cmd: "ls -1 {{ capture_dir }}/sensor-*.pcap* 2>/dev/null | wc -l"
+  register: capture_files
+  changed_when: false
+  retries: 6
+  delay: 10
+  until: capture_files.stdout | int > 0
+  failed_when: false
+
+- name: Report capture status
+  ansible.builtin.debug:
+    msg: >-
+      {{ capture_files.stdout | int }} capture files present in {{ capture_dir }}

@@ -1,0 +1,123 @@
+#cloud-config
+# Bootstraps an Ubuntu host into a T-Pot honeypot sensor. Runs once at first
+# boot; ongoing configuration is handled by the Ansible playbooks in ansible/.
+
+hostname: ${hostname}
+fqdn: ${hostname}
+preserve_hostname: false
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - curl
+  - jq
+  - tcpdump
+  - tshark
+  - python3-pip
+  - python3-venv
+  - unzip
+  - awscli
+  - xfsprogs
+
+write_files:
+  # tshark is normally interactive about letting non-root users capture. The
+  # sensor answers that prompt ahead of time so the capture unit can drop
+  # privileges to the pcap group rather than running as root.
+  - path: /etc/apt/apt.conf.d/99-noninteractive
+    content: |
+      APT::Get::Assume-Yes "true";
+      DPkg::Options {"--force-confdef";"--force-confold";};
+
+  - path: /etc/sysctl.d/99-sensor.conf
+    content: |
+      # Elasticsearch refuses to start below this map count.
+      vm.max_map_count=262144
+      # The sensor receives large volumes of half open connections by design.
+      net.ipv4.tcp_max_syn_backlog=8192
+      net.core.somaxconn=4096
+      net.ipv4.tcp_syncookies=1
+      # Conntrack fills quickly under scan traffic; give it headroom.
+      net.netfilter.nf_conntrack_max=524288
+
+  - path: /etc/deception-shield/sensor.env
+    permissions: '0644'
+    content: |
+      SENSOR_ID=${sensor_id}
+      CAPTURE_BUCKET=${capture_bucket}
+      AWS_DEFAULT_REGION=${aws_region}
+      CAPTURE_INTERFACE=ens5
+      CAPTURE_DIR=/data/pcap
+      ROTATE_SECONDS=900
+      ROTATE_SIZE_MB=256
+
+  - path: /usr/local/sbin/prepare-data-volume.sh
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      # Formats and mounts the attached EBS data volume. Safe to re-run: the
+      # filesystem is only created when the device has none.
+      set -euo pipefail
+
+      DEVICE=""
+      for candidate in /dev/xvdf /dev/nvme1n1; do
+        if [ -b "$candidate" ]; then
+          DEVICE="$candidate"
+          break
+        fi
+      done
+
+      if [ -z "$DEVICE" ]; then
+        echo "no data volume attached yet" >&2
+        exit 1
+      fi
+
+      if ! blkid "$DEVICE" >/dev/null 2>&1; then
+        mkfs.xfs -L sensordata "$DEVICE"
+      fi
+
+      mkdir -p /data
+      if ! grep -q 'LABEL=sensordata' /etc/fstab; then
+        echo 'LABEL=sensordata /data xfs defaults,noatime,nofail 0 2' >> /etc/fstab
+      fi
+      mount -a
+
+      mkdir -p /data/pcap /data/elasticsearch /data/tpot
+      chown -R root:root /data
+
+runcmd:
+  - [ sysctl, --system ]
+
+  # The data volume attaches moments after the instance boots, so wait for the
+  # block device instead of assuming it is already present.
+  - |
+    for attempt in $(seq 1 30); do
+      if /usr/local/sbin/prepare-data-volume.sh; then
+        break
+      fi
+      sleep 10
+    done
+
+  # Elasticsearch and the capture archive are the two heavy writers. Both are
+  # pointed at the dedicated volume before T-Pot is installed.
+  - [ mkdir, -p, /opt/tpot ]
+  - [ git, clone, --depth, '1', 'https://github.com/telekom-security/tpotce', /opt/tpot ]
+
+  # T-Pot's installer is driven by an answer file so the boot stays unattended.
+  - |
+    cat > /opt/tpot/iso/installer/install.conf <<'ANSWERS'
+    myCONF_TPOT_FLAVOR='${tpot_edition}'
+    myCONF_WEB_USER='tpotadmin'
+    ANSWERS
+
+  - |
+    cd /opt/tpot
+    env TPOT_FLAVOR='${tpot_edition}' \
+        ./install.sh --type=auto --conf=/opt/tpot/iso/installer/install.conf \
+        >> /var/log/tpot-install.log 2>&1 || \
+        echo "review /var/log/tpot-install.log" >> /var/log/tpot-install.log
+
+  - [ systemctl, enable, --now, systemd-timesyncd ]
+
+final_message: "deception-shield sensor ${sensor_id} bootstrapped after $UPTIME seconds"

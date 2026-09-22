@@ -1,0 +1,39 @@
+# Credential policy for the emulated host.
+#
+# Format: username:uid:password   ('*' matches anything, '!' denies explicitly)
+#
+# The policy is deliberately not "accept everything". A host that accepts any
+# password is recognised as a honeypot by most tooling, and the session ends.
+# Accepting a small set of genuinely common weak credentials is both more
+# convincing and more informative: which credential succeeded tells you what the
+# attacker expected to find.
+
+# Denied outright: nobody guesses these, so accepting them would look wrong.
+root:0:!root
+root:0:!123456
+
+# Accepted. These are the credentials that dominate real SSH brute force traffic.
+root:0:admin
+root:0:password
+root:0:1234
+root:0:123456789
+root:0:toor
+root:0:P@ssw0rd
+root:0:root123
+admin:0:admin
+admin:0:1234
+admin:0:password
+ubuntu:0:ubuntu
+user:0:user
+test:0:test
+oracle:0:oracle
+postgres:0:postgres
+pi:0:raspberry
+support:0:support
+
+# Default credentials shipped by IoT devices, which IoT botnets try first.
+admin:0:1234567890
+root:0:vizxv
+root:0:xc3511
+root:0:xmhdipc
+root:0:juantech

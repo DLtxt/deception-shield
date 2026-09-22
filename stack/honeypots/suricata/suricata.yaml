@@ -1,0 +1,130 @@
+%YAML 1.1
+---
+# Suricata configuration for the sensor.
+#
+# Suricata runs alongside the packet capture on the same interface, so every
+# frame written to disk also receives a signature verdict. Its EVE output is
+# what turns a payload into a named technique in the analysis pipeline.
+
+vars:
+  address-groups:
+    # The sensor is the target, never the attacker. Defining HOME_NET as the
+    # sensor subnet means every rule directionality reads correctly.
+    HOME_NET: "[10.90.0.0/16]"
+    EXTERNAL_NET: "!$HOME_NET"
+    HTTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+
+  port-groups:
+    HTTP_PORTS: "[80,8080,8000,8888]"
+    SHELLCODE_PORTS: "!80"
+    SSH_PORTS: "[22,2222]"
+
+default-log-dir: /var/log/suricata
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      # Rotation is handled outside Suricata so that the file the Logstash input
+      # follows is never replaced underneath it.
+      types:
+        - alert:
+            payload: yes
+            payload-printable: yes
+            packet: yes
+            metadata: yes
+            http-body: yes
+            tagged-packets: yes
+        - http:
+            extended: yes
+        - dns:
+            version: 2
+        - tls:
+            extended: yes
+            ja3: yes
+            ja3s: yes
+        - ssh
+        - flow
+        - smtp
+        - files:
+            force-magic: yes
+            force-hash: [sha256]
+
+  - stats:
+      enabled: yes
+      filename: stats.log
+      interval: 60
+
+af-packet:
+  - interface: default
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+    use-mmap: yes
+    tpacket-v3: yes
+    ring-size: 4096
+    block-size: 65536
+
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+      ja3-fingerprints: yes
+    http:
+      enabled: yes
+      libhtp:
+        default-config:
+          personality: IDS
+          request-body-limit: 100kb
+          response-body-limit: 100kb
+    ssh:
+      enabled: yes
+    smb:
+      enabled: yes
+    dns:
+      tcp: { enabled: yes }
+      udp: { enabled: yes }
+
+# The sensor sees far more traffic than a normal host, most of it half open
+# scan connections, so the flow tables are sized generously.
+flow:
+  memcap: 512mb
+  hash-size: 131072
+  prealloc: 65536
+  emergency-recovery: 30
+
+stream:
+  memcap: 512mb
+  checksum-validation: no
+  reassembly:
+    memcap: 1gb
+    depth: 4mb
+    toserver-chunk-size: 2560
+    toclient-chunk-size: 2560
+
+defrag:
+  memcap: 128mb
+
+detect-engine:
+  - profile: medium
+  - sgh-mpm-context: auto
+
+default-rule-path: /var/lib/suricata/rules
+rule-files:
+  - suricata.rules
+
+classification-file: /etc/suricata/classification.config
+reference-config-file: /etc/suricata/reference.config
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+    - file:
+        enabled: yes
+        level: info
+        filename: /var/log/suricata/suricata.log

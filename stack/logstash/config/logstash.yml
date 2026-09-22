@@ -1,0 +1,16 @@
+http.host: "0.0.0.0"
+node.name: deception-shield-logstash
+
+pipeline.workers: 4
+pipeline.batch.size: 250
+pipeline.batch.delay: 50
+pipeline.ordered: false
+
+# The sensor keeps events on disk if Elasticsearch stalls, so a restart of the
+# analysis plane does not lose attack telemetry that has already been captured.
+queue.type: persisted
+queue.max_bytes: 4gb
+dead_letter_queue.enable: true
+dead_letter_queue.max_bytes: 1gb
+
+log.level: info

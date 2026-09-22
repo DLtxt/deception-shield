@@ -1,0 +1,19 @@
+---
+- name: restart capture
+  ansible.builtin.systemd:
+    name: deception-capture
+    state: restarted
+    daemon_reload: true
+  failed_when: false
+
+- name: restart extractor
+  ansible.builtin.systemd:
+    name: deception-extractor
+    state: restarted
+    daemon_reload: true
+  failed_when: false
+
+- name: restart journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: restarted

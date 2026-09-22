@@ -1,0 +1,5 @@
+---
+- name: reload logstash
+  ansible.builtin.command:
+    cmd: docker restart logstash
+  failed_when: false

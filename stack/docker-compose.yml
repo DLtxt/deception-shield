@@ -1,0 +1,245 @@
+# Deception Shield sensor stack.
+#
+# Three planes run side by side on the sensor:
+#   deception   the honeypot listeners that attackers actually reach
+#   capture     full packet capture plus the tshark payload extractor
+#   analysis    Elasticsearch, Logstash and Kibana
+#
+# Compose profiles let a plane run on its own. `--profile analysis` brings up
+# only ELK, which is how the stack runs on a workstation when replaying
+# captures pulled down from S3.
+
+name: deception-shield
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+networks:
+  deception:
+    name: deception
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  analysis:
+    name: analysis
+    driver: bridge
+
+volumes:
+  es_data:
+  cowrie_var:
+  dionaea_var:
+  suricata_logs:
+
+services:
+  # ----------------------------------------------------------------- analysis
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: ds-elasticsearch
+    profiles: ["analysis", "all"]
+    restart: unless-stopped
+    environment:
+      - node.name=ds-es01
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms${ES_HEAP:-2g} -Xmx${ES_HEAP:-2g}"
+      # The cluster listens only on the internal analysis network and is never
+      # published to the host, so transport security is handled by isolation
+      # rather than by TLS between two containers on the same bridge.
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - action.destructive_requires_name=true
+      - indices.query.bool.max_clause_count=8192
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - ./elasticsearch/index-templates:/templates:ro
+    networks: [analysis]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+    logging: *default-logging
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.4
+    container_name: ds-logstash
+    profiles: ["analysis", "all"]
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - "LS_JAVA_OPTS=-Xms${LS_HEAP:-1g} -Xmx${LS_HEAP:-1g}"
+      - ELASTIC_HOST=http://elasticsearch:9200
+      - SENSOR_ID=${SENSOR_ID:-local-sensor}
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/patterns:/usr/share/logstash/patterns:ro
+      - cowrie_var:/honeypot/cowrie:ro
+      - dionaea_var:/honeypot/dionaea:ro
+      - suricata_logs:/honeypot/suricata:ro
+      - ${CAPTURE_DIR:-./data}/extracted:/capture/extracted:ro
+    networks: [analysis]
+    ports:
+      # Bound to loopback: the tshark extractor reaches Logstash over the host,
+      # and nothing outside the sensor should be able to inject events.
+      - "127.0.0.1:5044:5044"
+      - "127.0.0.1:5400:5400"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS localhost:9600/_node/pipelines | grep -q pipeline"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    logging: *default-logging
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: ds-kibana
+    profiles: ["analysis", "all"]
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=deception-shield
+      - SERVER_PUBLICBASEURL=${KIBANA_BASE_URL:-http://localhost:5601}
+      - XPACK_REPORTING_ENABLED=false
+      - TELEMETRY_ENABLED=false
+    volumes:
+      - ./kibana/dashboards:/dashboards:ro
+    networks: [analysis]
+    ports:
+      # T-Pot fronts this with authenticated nginx on 64297 in the deployed
+      # configuration; the direct port stays on loopback.
+      - "127.0.0.1:5601:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- deception
+  cowrie:
+    image: cowrie/cowrie:v2.5.0
+    container_name: ds-cowrie
+    profiles: ["deception", "all"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp
+    volumes:
+      - cowrie_var:/cowrie/var
+      - ./honeypots/cowrie/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./honeypots/cowrie/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+    networks: [deception]
+    ports:
+      - "22:2222"
+      - "23:2223"
+    logging: *default-logging
+
+  dionaea:
+    image: dinotools/dionaea:latest
+    container_name: ds-dionaea
+    profiles: ["deception", "all"]
+    restart: unless-stopped
+    cap_add: [NET_BIND_SERVICE]
+    volumes:
+      - dionaea_var:/opt/dionaea/var
+    networks: [deception]
+    ports:
+      - "21:21"      # FTP
+      - "42:42"      # WINS
+      - "135:135"    # MSRPC
+      - "445:445"    # SMB
+      - "1433:1433"  # MSSQL
+      - "1723:1723"  # PPTP
+      - "1883:1883"  # MQTT
+      - "3306:3306"  # MySQL
+      - "5060:5060"  # SIP
+      - "11211:11211" # Memcached
+    logging: *default-logging
+
+  # Suricata watches the host interface directly, so it sees the same frames the
+  # packet capture writes and gives every flow a signature verdict.
+  suricata:
+    image: jasonish/suricata:7.0
+    container_name: ds-suricata
+    profiles: ["capture", "all"]
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
+    command: ["-i", "${CAPTURE_INTERFACE:-eth0}"]
+    volumes:
+      - suricata_logs:/var/log/suricata
+      - ./honeypots/suricata/suricata.yaml:/etc/suricata/suricata.yaml:ro
+    logging: *default-logging
+
+  # ------------------------------------------------------------------ capture
+  # Full packet capture. Files rotate on both time and size so that no single
+  # capture grows unbounded during a sustained scan.
+  pcap-writer:
+    image: nicolaka/netshoot:latest
+    container_name: ds-pcap-writer
+    profiles: ["capture", "all"]
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ${CAPTURE_DIR:-./data}/pcap:/pcap
+    environment:
+      - CAPTURE_INTERFACE=${CAPTURE_INTERFACE:-eth0}
+      - ROTATE_SECONDS=${ROTATE_SECONDS:-900}
+      - ROTATE_SIZE_MB=${ROTATE_SIZE_MB:-256}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        exec tcpdump -i "$$CAPTURE_INTERFACE" -nn -s 0 \
+          -G "$$ROTATE_SECONDS" -C "$$ROTATE_SIZE_MB" -W 512 \
+          -w /pcap/sensor-%Y%m%d-%H%M%S.pcap \
+          -z /usr/bin/gzip \
+          'not (port 64295 or port 64297 or port 64294)'
+    logging: *default-logging
+
+  # Wireshark's command line engine turns each rotated capture into structured
+  # records. Dissection happens here rather than in Logstash because tshark
+  # understands the application protocols natively.
+  tshark-extractor:
+    build:
+      # Root context: the image needs both the Dockerfile in capture/ and the
+      # analysis package that provides the extraction service.
+      context: ..
+      dockerfile: capture/Dockerfile
+    image: deception-shield/tshark-extractor:1.0.0
+    container_name: ds-tshark-extractor
+    profiles: ["capture", "all"]
+    restart: unless-stopped
+    depends_on:
+      logstash:
+        condition: service_healthy
+    environment:
+      - CAPTURE_DIR=/pcap
+      - OUTPUT_DIR=/extracted
+      - LOGSTASH_HOST=${LOGSTASH_HOST:-host.docker.internal}
+      - LOGSTASH_PORT=5400
+      - SENSOR_ID=${SENSOR_ID:-local-sensor}
+      - POLL_INTERVAL=60
+    volumes:
+      - ${CAPTURE_DIR:-./data}/pcap:/pcap
+      - ${CAPTURE_DIR:-./data}/extracted:/extracted
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging: *default-logging

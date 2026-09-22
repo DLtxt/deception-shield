@@ -1,0 +1,78 @@
+---
+# The pipeline definitions and dashboards live in the repository, so rolling out
+# a change is a matter of re-running this role rather than editing files on the
+# sensor.
+
+- name: Create the stack directories
+  ansible.builtin.file:
+    path: "/opt/deception-shield/stack/{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - logstash/pipeline
+    - logstash/config
+    - logstash/patterns
+    - elasticsearch/index-templates
+    - kibana/dashboards
+
+- name: Install the Logstash pipelines
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../stack/logstash/"
+    dest: /opt/deception-shield/stack/logstash/
+    mode: "0644"
+  notify: reload logstash
+
+- name: Install the Elasticsearch index templates
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../stack/elasticsearch/"
+    dest: /opt/deception-shield/stack/elasticsearch/
+    mode: "0644"
+
+- name: Install the Kibana saved objects
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../stack/kibana/dashboards/"
+    dest: /opt/deception-shield/stack/kibana/dashboards/
+    mode: "0644"
+
+- name: Wait for Elasticsearch
+  ansible.builtin.uri:
+    url: http://127.0.0.1:64298/_cluster/health
+    status_code: 200
+  register: es_health
+  until: es_health.status == 200
+  retries: 30
+  delay: 10
+  failed_when: false
+
+- name: Apply the ILM policies
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:64298/_ilm/policy/{{ item.key }}"
+    method: PUT
+    body_format: json
+    body: "{{ item.value }}"
+    status_code: [200, 201]
+  loop: >-
+    {{ (lookup('file', playbook_dir + '/../stack/elasticsearch/ilm-policies.json') | from_json)
+       | dict2items }}
+  when: es_health.status is defined and es_health.status == 200
+
+- name: Apply the index templates
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:64298/_index_template/{{ item | basename | splitext | first }}"
+    method: PUT
+    body_format: json
+    body: "{{ lookup('file', item) }}"
+    status_code: [200, 201]
+  with_fileglob:
+    - "{{ playbook_dir }}/../stack/elasticsearch/index-templates/*.json"
+  when: es_health.status is defined and es_health.status == 200
+
+- name: Import the Kibana saved objects
+  ansible.builtin.shell:
+    cmd: >-
+      curl -sS -X POST "http://127.0.0.1:64296/api/saved_objects/_import?overwrite=true"
+      -H "kbn-xsrf: true"
+      --form file=@/opt/deception-shield/stack/kibana/dashboards/deception-shield-overview.ndjson
+  register: kibana_import
+  changed_when: "'\"success\":true' in kibana_import.stdout"
+  failed_when: false

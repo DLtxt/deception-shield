@@ -1,0 +1,233 @@
+{
+  "index_patterns": [
+    "logs-pcap-deception*"
+  ],
+  "data_stream": {},
+  "priority": 500,
+  "_meta": {
+    "description": "Payload records dissected out of packet captures by tshark",
+    "managed_by": "deception-shield"
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "30s",
+      "index.lifecycle.name": "deception-pcap-policy",
+      "index.mapping.total_fields.limit": 2000,
+      "index.codec": "best_compression"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "frame_time": {
+          "type": "date"
+        },
+        "event": {
+          "properties": {
+            "id": {
+              "type": "keyword"
+            },
+            "kind": {
+              "type": "keyword"
+            },
+            "module": {
+              "type": "keyword"
+            },
+            "dataset": {
+              "type": "keyword"
+            },
+            "category": {
+              "type": "keyword"
+            }
+          }
+        },
+        "source": {
+          "properties": {
+            "ip": {
+              "type": "ip"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "bytes": {
+              "type": "long"
+            },
+            "packets": {
+              "type": "long"
+            },
+            "is_external": {
+              "type": "keyword"
+            },
+            "geo": {
+              "properties": {
+                "city_name": {
+                  "type": "keyword"
+                },
+                "country_name": {
+                  "type": "keyword"
+                },
+                "country_code2": {
+                  "type": "keyword"
+                },
+                "continent_code": {
+                  "type": "keyword"
+                },
+                "region_name": {
+                  "type": "keyword"
+                },
+                "location": {
+                  "type": "geo_point"
+                }
+              }
+            },
+            "as": {
+              "properties": {
+                "asn": {
+                  "type": "long"
+                },
+                "as_org": {
+                  "type": "keyword"
+                },
+                "organization": {
+                  "properties": {
+                    "name": {
+                      "type": "keyword"
+                    }
+                  }
+                },
+                "ip": {
+                  "type": "ip"
+                }
+              }
+            }
+          }
+        },
+        "destination": {
+          "properties": {
+            "ip": {
+              "type": "ip"
+            },
+            "port": {
+              "type": "integer"
+            },
+            "bytes": {
+              "type": "long"
+            },
+            "packets": {
+              "type": "long"
+            }
+          }
+        },
+        "network": {
+          "properties": {
+            "transport": {
+              "type": "keyword"
+            },
+            "protocol": {
+              "type": "keyword"
+            },
+            "bytes": {
+              "type": "long"
+            },
+            "flow_id": {
+              "type": "keyword"
+            },
+            "state": {
+              "type": "keyword"
+            },
+            "response_ratio": {
+              "type": "float"
+            }
+          }
+        },
+        "observer": {
+          "properties": {
+            "name": {
+              "type": "keyword"
+            },
+            "type": {
+              "type": "keyword"
+            }
+          }
+        },
+        "stream_id": {
+          "type": "long"
+        },
+        "payload_length": {
+          "type": "integer"
+        },
+        "printable_ratio": {
+          "type": "float"
+        },
+        "payload_ascii": {
+          "type": "text",
+          "analyzer": "standard",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 512
+            }
+          }
+        },
+        "payload_hex": {
+          "type": "keyword",
+          "index": false,
+          "doc_values": false,
+          "ignore_above": 8192
+        },
+        "threat": {
+          "properties": {
+            "payload_score": {
+              "type": "integer"
+            },
+            "payload_signatures": {
+              "type": "keyword"
+            },
+            "triage": {
+              "type": "keyword"
+            },
+            "stage": {
+              "type": "keyword"
+            },
+            "indicator": {
+              "properties": {
+                "url": {
+                  "type": "keyword",
+                  "ignore_above": 2048
+                },
+                "base64": {
+                  "type": "keyword",
+                  "index": false,
+                  "ignore_above": 4096
+                },
+                "base64_decoded": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        },
+        "tags": {
+          "type": "keyword"
+        },
+        "data_stream": {
+          "properties": {
+            "type": {
+              "type": "constant_keyword"
+            },
+            "dataset": {
+              "type": "constant_keyword"
+            },
+            "namespace": {
+              "type": "constant_keyword"
+            }
+          }
+        }
+      }
+    }
+  }
+}

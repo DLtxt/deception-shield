@@ -1,0 +1,16 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart capture
+  ansible.builtin.systemd:
+    name: deception-capture
+    state: restarted
+    daemon_reload: true
+
+- name: restart extractor
+  ansible.builtin.systemd:
+    name: deception-extractor
+    state: restarted
+    daemon_reload: true
