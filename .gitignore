@@ -1,1 +1,25 @@
+# Secrets — never commit these. This repo is public.
+.env
+.env.*
+!.env.example
+!.env.sample
+.aws/
+.ssh/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets.yml
+secrets.yaml
+*.secrets
+credentials
+credentials.json
+service-account*.json
+.netrc
+.npmrc
+
+# OS cruft
 .DS_Store
+Thumbs.db
