@@ -1,0 +1,77 @@
+# Detection as code: every change to a rule, a fixture or the toolkit is
+# checked before it can reach the sensors.
+#
+#   rules     the toolkit's tests, every rule against its own attack and
+#             benign command cases, and the fixture gate: labelled attack
+#             sessions the rules must keep catching, benign sessions they must
+#             not fire on, judged against detections/thresholds.yml
+#   convert   the reference Sigma toolchain validates the rules against the
+#             specification and current ATT&CK, converts them for Elasticsearch,
+#             and confirms the committed Kibana searches match the rules
+
+name: detections
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Rules, fixtures and toolkit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: analysis/pyproject.toml
+
+      - name: Install the analysis toolkit
+        run: pip install -e "analysis[dev]"
+
+      - name: Unit tests, including each rule's attack and benign cases
+        run: python -m pytest analysis/tests -q
+
+      - name: Rules load and convert faithfully for Elasticsearch
+        run: deception-shield rules check
+
+      - name: Fixture gate
+        run: deception-shield rules test --step-summary
+
+  convert:
+    name: Sigma toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: detections/requirements.txt
+
+      - name: Install sigma-cli
+        run: pip install -r detections/requirements.txt
+
+      - name: Validate against the Sigma specification and current ATT&CK
+        run: sigma check --fail-on-issues detections/sigma
+
+      - name: Convert for Elasticsearch
+        run: ./scripts/convert-detections.sh
+
+      - name: Committed Kibana searches match the rules
+        run: |
+          if ! git diff --exit-code -- stack/kibana/detections/; then
+            echo "::error::stack/kibana/detections is stale; run make rules-convert and commit the result"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elasticsearch-detections
+          path: build/detections/

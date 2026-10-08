@@ -1,0 +1,43 @@
+title: SSH Public Key Written To authorized_keys
+id: 3038abd8-ebc6-4e29-8d8e-57ba3e9adff1
+status: experimental
+description: |
+  Detects a command that writes an SSH public key into an authorized_keys file,
+  either inline or fetched from elsewhere. A planted key is a way back in that
+  survives a password change, and it is the most common persistence step taken
+  in SSH honeypot sessions. Appending a local .pub file is left alone, since that
+  is how an administrator usually installs their own key.
+references:
+  - https://attack.mitre.org/techniques/T1098/004/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.persistence
+  - attack.t1098.004
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  write:
+    input|contains:
+      - '>*authorized_keys'
+      - 'tee *authorized_keys'
+      - ' -o *authorized_keys'
+      - ' -O *authorized_keys'
+  key_inline:
+    input|contains:
+      - 'ssh-rsa AAAA'
+      - 'ssh-dss AAAA'
+      - 'ssh-ed25519 AAAA'
+      - 'ecdsa-sha2-nistp'
+      - 'sk-ssh-ed25519@openssh.com'
+  key_fetched:
+    input|contains:
+      - 'curl '
+      - 'wget '
+  condition: command and write and 1 of key_*
+falsepositives:
+  - An administrator pasting their own key into authorized_keys at the prompt
+  - Importing keys published by a code hosting account with curl
+level: high

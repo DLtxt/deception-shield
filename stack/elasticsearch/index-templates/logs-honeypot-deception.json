@@ -56,8 +56,8 @@
         "process": {
           "properties": {
             "command_line": {
-              "type": "text",
-              "fields": { "keyword": { "type": "keyword", "ignore_above": 1024 } }
+              "type": "wildcard",
+              "fields": { "text": { "type": "match_only_text" } }
             }
           }
         },

@@ -141,6 +141,12 @@ services:
     cap_drop: [ALL]
     tmpfs:
       - /tmp
+    environment:
+      # Cowrie reads COWRIE_<SECTION>_<OPTION> over cowrie.cfg. Naming the
+      # sensor here, instead of leaving the container hostname, keeps session
+      # identifiers the same whether a corpus is built from the raw log or
+      # from Elasticsearch.
+      - COWRIE_HONEYPOT_SENSOR_NAME=${SENSOR_ID:-local-sensor}
     volumes:
       - cowrie_var:/cowrie/var
       - ./honeypots/cowrie/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro

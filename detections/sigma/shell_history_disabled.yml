@@ -1,0 +1,42 @@
+title: Shell History Recording Disabled
+id: 3fe607c5-0713-4fa8-9838-166deb587b2b
+status: experimental
+description: |
+  Detects a shell being told to stop recording history: HISTFILE unset, emptied
+  or pointed at /dev/null, the history size set to zero, or history switched off
+  with set +o history. Intruders do this before they start so that nothing is
+  written in the first place.
+references:
+  - https://attack.mitre.org/techniques/T1070/003/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.stealth
+  - attack.t1070.003
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_unset:
+    input|contains:
+      - 'unset *HISTFILE'
+      - 'unset *HISTSIZE'
+      - 'unset *HISTSAVE'
+  selection_assigned:
+    input|contains:
+      - 'HISTFILE=/dev/null'
+      - 'HISTSIZE=0'
+      - 'HISTFILESIZE=0'
+      - 'HISTFILE= '
+      - 'HISTFILE=;'
+      - 'HISTFILE=""'
+      - "HISTFILE=''"
+  selection_assigned_last:
+    input|endswith: 'HISTFILE='
+  selection_option:
+    input|contains: 'set +o history'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Shell profiles that disable history on shared accounts
+level: medium

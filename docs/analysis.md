@@ -17,6 +17,22 @@ deception-shield extract                       # run the extraction service
 Both reporting commands take `--format json` for machine consumption and
 `--min-score` to drop everything below a threshold.
 
+The detection commands work on command sessions rather than payloads:
+
+```bash
+deception-shield sessions build data/cowrie -o data/sessions.jsonl     # or --elasticsearch URL --since 28d
+deception-shield sessions import-history ~/.zsh_history --host laptop -o data/benign.jsonl
+deception-shield sessions stats data/sessions.jsonl
+deception-shield label data/sessions.jsonl --labels data/labels.csv
+deception-shield rules check                   # validate the Sigma rules for both engines
+deception-shield rules test                    # the CI fixture gate
+deception-shield detect data/sessions.jsonl    # what the rules flag in a corpus
+deception-shield evaluate data/sessions.jsonl data/benign.jsonl --labels data/labels.csv --holdout 2026-W40
+deception-shield fixtures export data/sessions.jsonl --labels data/labels.csv --holdout 2026-W40
+```
+
+[`detections.md`](detections.md) covers the rules and the workflow around them.
+
 ## Payload scoring
 
 Each payload is matched against a signature set. A signature carries a weight

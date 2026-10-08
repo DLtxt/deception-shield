@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Imports the Kibana saved objects.
+# Imports the Kibana saved objects: the dashboards, and the saved searches
+# converted from the Sigma rules by convert-detections.sh.
 #
 # Safe to re-run: the import overwrites objects with matching identifiers, which
-# is how a dashboard change is rolled out.
+# is how a dashboard or rule change is rolled out.
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIBANA_URL=${KIBANA_URL:-http://localhost:5601}
-DASHBOARD_DIR=${DASHBOARD_DIR:-"$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/stack/kibana/dashboards"}
+DASHBOARD_DIR=${DASHBOARD_DIR:-"${ROOT}/stack/kibana/dashboards"}
+DETECTION_DIR=${DETECTION_DIR:-"${ROOT}/stack/kibana/detections"}
 TIMEOUT=${TIMEOUT:-180}
 
 echo "waiting for kibana at ${KIBANA_URL}"
@@ -23,9 +26,11 @@ done
 echo "kibana is available"
 
 shopt -s nullglob
-saved_objects=( "${DASHBOARD_DIR}"/*.ndjson )
+# The data view is defined with the dashboards, and the searches refer to it,
+# so the dashboards go first.
+saved_objects=( "${DASHBOARD_DIR}"/*.ndjson "${DETECTION_DIR}"/*.ndjson )
 if (( ${#saved_objects[@]} == 0 )); then
-    echo "no saved object files in ${DASHBOARD_DIR}" >&2
+    echo "no saved object files in ${DASHBOARD_DIR} or ${DETECTION_DIR}" >&2
     exit 1
 fi
 
@@ -47,3 +52,4 @@ done
 
 echo
 echo "open ${KIBANA_URL}/app/dashboards"
+echo "rule searches are under ${KIBANA_URL}/app/discover, prefixed SIGMA -"

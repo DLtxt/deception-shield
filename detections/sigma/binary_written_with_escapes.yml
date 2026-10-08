@@ -1,0 +1,34 @@
+title: Executable Written Through Shell Escape Sequences
+id: 8f429bfe-d1e7-4037-87b9-4eefba36a113
+status: experimental
+description: |
+  Detects a binary transferred through the shell itself: echo or printf writing
+  long runs of hex escaped bytes into a file, or any command carrying the ELF
+  header written as escapes. IoT botnets use this on devices with no wget, curl
+  or tftp, sending a small loader a few dozen bytes per line until it is whole.
+references:
+  - https://attack.mitre.org/techniques/T1105/
+  - https://github.com/jgamblin/Mirai-Source-Code
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.command-and-control
+  - attack.t1105
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_elf_header:
+    input|contains:
+      - '\x7f\x45\x4c\x46'
+      - '\x7F\x45\x4C\x46'
+      - '\x7fELF'
+      - '\x7FELF'
+      - '\177ELF'
+  selection_hex_to_file:
+    input|re: '.*(echo|printf) [^;|\&]*(\\x[0-9a-fA-F]{2}){16,}[^;|\&]*\>.*'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Unlikely
+level: high

@@ -13,6 +13,7 @@ license = { text = "MIT" }
 dependencies = [
   "elasticsearch>=8.12,<9",
   "boto3>=1.34",
+  "pyyaml>=6.0",
   "rich>=13.7",
 ]
 

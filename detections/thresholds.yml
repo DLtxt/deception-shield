@@ -1,0 +1,29 @@
+# What `deception-shield rules test` requires of the rule set. CI runs it on
+# every commit, and a change that breaks any of these fails the build.
+#
+# Raise a threshold once the fixtures show the rules clear it comfortably.
+# Lower one only alongside a note here saying which sessions it lets through
+# and why, so a known gap is a decision on record rather than a silent drift.
+
+# Share of attack fixtures that at least one rule must detect.
+attack_recall: 0.95
+
+# For each technique the rule set covers: share of the fixtures labelled with
+# it that the technique's own rules must detect.
+technique_recall: 0.90
+
+# Share of benign fixtures allowed to raise any alert at all.
+false_positive_rate: 0.01
+
+# Benign fixtures any one rule may alert on.
+rule_false_positives: 0
+
+# Every rule must detect at least one attack fixture, and every technique must
+# have at least one fixture labelled with it. A rule nothing exercises is a
+# rule nothing tests.
+require_coverage: true
+
+# Per technique (T1105) or per rule id exceptions, each with its reason.
+overrides:
+  technique_recall: {}
+  rule_false_positives: {}

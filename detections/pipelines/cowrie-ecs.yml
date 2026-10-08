@@ -1,0 +1,34 @@
+# sigma-cli processing pipeline: Cowrie field names to the index's field names.
+#
+# Rules are written against Cowrie's own event shape, the same shape the
+# honeypot logs and the fixtures carry. Logstash renames those fields on the way
+# into Elasticsearch (stack/logstash/pipeline/20-cowrie.conf), so converting a
+# rule for the index means applying the same renames. Fields Logstash leaves
+# alone are mapped to themselves, which also tells the portability check that
+# they exist in the index.
+#
+#   sigma convert -t lucene -p detections/pipelines/cowrie-ecs.yml detections/sigma
+
+name: Deception Shield Cowrie fields
+priority: 20
+transformations:
+  - id: cowrie_fields_to_index
+    type: field_name_mapping
+    mapping:
+      eventid: eventid
+      protocol: protocol
+      input: process.command_line
+      username: user.name
+      password: user.password
+      src_ip: source.ip
+      src_port: source.port
+      dst_ip: destination.ip
+      dst_port: destination.port
+      session: session.id
+      url: threat.indicator.url
+      shasum: file.hash.sha256
+      outfile: file.path
+      version: client.version
+    rule_conditions:
+      - type: logsource
+        product: cowrie

@@ -1,0 +1,39 @@
+title: SSH Directory Unlocked Or Recreated For Key Planting
+id: c2196e43-fea4-4156-aa31-1f48f83d2086
+status: experimental
+description: |
+  Detects the preparation that precedes planting an SSH key: changing the
+  immutable or append-only attributes on ~/.ssh with chattr (or lockr, a renamed
+  copy some campaigns carry), or deleting the .ssh directory outright so that
+  only the intruder's key will remain in it. Catching the preparation on its own
+  keeps the session detected when the key is written in a way the key rule does
+  not recognise.
+references:
+  - https://attack.mitre.org/techniques/T1098/004/
+  - https://attack.mitre.org/techniques/T1222/002/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.persistence
+  - attack.t1098.004
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_attributes:
+    input|contains:
+      - 'chattr *.ssh'
+      - 'lockr *.ssh'
+  selection_removed:
+    input|re: '.*rm +-[a-zA-Z]+ +(\~/|/root/|\$HOME/)?\.ssh/? *[;|\&].*'
+  selection_removed_last:
+    input|endswith:
+      - 'rm -* .ssh'
+      - 'rm -* .ssh/'
+      - 'rm -*/.ssh'
+      - 'rm -*/.ssh/'
+  condition: command and 1 of selection_*
+falsepositives:
+  - An administrator resetting a user's SSH configuration
+level: medium

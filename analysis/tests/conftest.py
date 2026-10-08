@@ -17,8 +17,74 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from deception_shield.models import PayloadRecord  # noqa: E402
 from deception_shield.scoring import score_payload  # noqa: E402
+from deception_shield.sessions import Command, Session  # noqa: E402
 
 BASE_TIME = datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+RULES_DIR = Path(__file__).resolve().parents[2] / "detections" / "sigma"
+
+
+def make_session(
+    ident: str,
+    commands: tuple[str, ...] = ("id",),
+    *,
+    start: datetime = BASE_TIME,
+    origin: str = "cowrie",
+    source_ip: str | None = "203.0.113.7",
+    username: str | None = "root",
+) -> Session:
+    """A session as the assembler or the history import would produce it."""
+    return Session(
+        id=ident,
+        origin=origin,
+        sensor=ident.split("/")[0],
+        start=start,
+        end=start + timedelta(seconds=len(commands)),
+        source_ip=source_ip,
+        username=username,
+        commands=[Command(start + timedelta(seconds=i), text) for i, text in enumerate(commands)],
+    )
+
+
+def write_rule(directory: Path, name: str, rule_id: str, contains: str, technique: str) -> None:
+    """A minimal valid rule matching Cowrie command input containing ``contains``."""
+    (directory / f"{name}.yml").write_text(
+        f"""title: {name}
+id: {rule_id}
+status: test
+level: high
+tags:
+  - attack.execution
+  - attack.{technique.lower()}
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection:
+    input|contains: '{contains}'
+  condition: command and selection
+falsepositives:
+  - none
+""",
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture
+def session_factory():
+    return make_session
+
+
+@pytest.fixture
+def small_rules(tmp_path: Path) -> Path:
+    """Two rules: wget for T1105 and history -c for T1070.003."""
+    directory = tmp_path / "rules"
+    directory.mkdir()
+    write_rule(directory, "wget", "11111111-1111-4111-8111-111111111111", "wget ", "T1105")
+    write_rule(
+        directory, "history", "22222222-2222-4222-8222-222222222222", "history -c", "T1070.003"
+    )
+    return directory
 
 
 def make_record(

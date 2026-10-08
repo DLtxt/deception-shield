@@ -1,0 +1,28 @@
+title: Cron Job Written Into A System Cron Location
+id: ddef122f-dd7d-48c6-ad29-f78a045410c2
+status: experimental
+description: |
+  Detects /etc/crontab, an /etc/cron.* directory or the crontab spool being
+  written by redirection, tee or a download, rather than through an editor or a
+  package. A job placed there survives reboots and runs as whichever user its
+  line names, root included.
+references:
+  - https://attack.mitre.org/techniques/T1053/003/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.persistence
+  - attack.t1053.003
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_redirect:
+    input|re: '.*(\>|tee +(-a +)?) *[\"'']?(/etc/crontab|/etc/cron\.(d|hourly|daily|weekly|monthly)/|/var/spool/cron/).*'
+  selection_download:
+    input|re: '.*(wget|curl) ([^;|\&]* )?-[oO] *[\"'']?(/etc/crontab|/etc/cron\.(d|hourly|daily|weekly|monthly)/|/var/spool/cron/).*'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Administrators appending jobs to /etc/crontab from the command line
+level: high

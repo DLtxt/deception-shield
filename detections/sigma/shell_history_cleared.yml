@@ -1,0 +1,29 @@
+title: Shell History Cleared Or Deleted
+id: af582e99-c075-4997-8ab0-15239a97cc86
+status: experimental
+description: |
+  Detects shell history being wiped: the history builtin clearing the session's
+  list, or a history file deleted, truncated, or replaced by a link to /dev/null.
+  Intruders do this to remove the record of what they have just run.
+references:
+  - https://attack.mitre.org/techniques/T1070/003/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.stealth
+  - attack.t1070.003
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_builtin:
+    input|contains: 'history -c'
+  selection_removed:
+    input|re: '.*(rm|shred|unlink) [^;|\&]*_history.*'
+  selection_truncated:
+    input|re: '.*(\>|ln +-[a-zA-Z]*s[a-zA-Z]* +/dev/null) *[\"'']?[^ ;|\&]*_history.*'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Users clearing their own history for privacy
+level: medium

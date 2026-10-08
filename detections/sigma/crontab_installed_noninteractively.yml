@@ -1,0 +1,36 @@
+title: Crontab Replaced From A Pipe Or File
+id: 9c6cbce6-cdaa-47c6-a878-ca16ecc541ec
+status: experimental
+description: |
+  Detects a user crontab installed without the editor, from a pipe
+  (echo ... | crontab -) or from a file (crontab /tmp/x). Malware schedules
+  itself this way, typically re-downloading its payload every few minutes so
+  that a cleanup does not stick. People edit crontabs with crontab -e, which
+  this rule does not match.
+references:
+  - https://attack.mitre.org/techniques/T1053/003/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.persistence
+  - attack.t1053.003
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_pipe_last:
+    input|endswith:
+      - '|crontab'
+      - '| crontab'
+      - '|crontab -'
+      - '| crontab -'
+      - '| sudo crontab -'
+  selection_pipe:
+    input|re: '.*\| *(sudo +)?crontab( +-u +[^ ]+)?( +-)? *[;|)\&].*'
+  selection_file:
+    input|re: '(.*[ ;|\&(])?crontab +(-u +[^ ]+ +)?[^- ;|\&][^ ;|\&]*.*'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Configuration management installing crontabs from files
+level: high

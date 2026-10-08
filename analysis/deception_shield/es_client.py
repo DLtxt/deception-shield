@@ -111,6 +111,56 @@ class TelemetryStore:
 
             search_after = hits[-1]["sort"]
 
+    def fetch_session_events(
+        self,
+        *,
+        since: datetime,
+        until: datetime | None = None,
+        index: str = DEFAULT_INDEX,
+        sensor_id: str | None = None,
+        batch: int = 500,
+    ) -> Iterator[dict[str, Any]]:
+        """Cowrie events for every session that ran a command in the window.
+
+        Two passes keep this proportional to the sessions that matter. The first
+        finds sessions with command input; the second pulls every event those
+        sessions produced, including the connection and login that preceded the
+        window when a session straddles its start. Most honeypot sessions are
+        failed logins, and fetching the whole window would move far more than is
+        needed.
+        """
+        until = until or datetime.now(timezone.utc)
+        must: list[dict[str, Any]] = [
+            {"range": {"@timestamp": {"gte": since.isoformat(), "lte": until.isoformat()}}},
+            {"term": {"event.module": "cowrie"}},
+            {"term": {"eventid": "cowrie.command.input"}},
+        ]
+        if sensor_id:
+            must.append({"term": {"observer.name": sensor_id}})
+
+        session_ids = sorted(
+            {
+                str(document["session"]["id"])
+                for document in self._scan(index, {"bool": {"must": must}}, limit=None)
+                if isinstance(document.get("session"), dict) and document["session"].get("id")
+            }
+        )
+        log.info("%s sessions ran commands in the window", len(session_ids))
+
+        for start in range(0, len(session_ids), batch):
+            query = {
+                "bool": {
+                    "must": [
+                        {"term": {"event.module": "cowrie"}},
+                        {"terms": {"session.id": session_ids[start : start + batch]}},
+                    ]
+                }
+            }
+            for document in self._scan(index, query, limit=None):
+                event = document_to_cowrie_event(document)
+                if event is not None:
+                    yield event
+
     def top_sources(
         self,
         *,
@@ -152,6 +202,53 @@ class TelemetryStore:
             }
             for bucket in buckets
         ]
+
+
+def document_to_cowrie_event(document: dict[str, Any]) -> dict[str, Any] | None:
+    """Undo the Logstash renames, returning an event in Cowrie's own shape.
+
+    The session assembler reads Cowrie's field names, so events from the index
+    and events from a raw log go through exactly the same code. The renames
+    reversed here are the ones stack/logstash/pipeline/20-cowrie.conf applies.
+    """
+
+    def nested(*path: str) -> Any:
+        current: Any = document
+        for part in path:
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+        return current
+
+    eventid = document.get("eventid")
+    timestamp = document.get("@timestamp")
+    session = nested("session", "id")
+    if not (eventid and timestamp and session):
+        return None
+
+    # Older pipeline versions could write the observer twice, as an array.
+    sensor = nested("observer", "name")
+    if isinstance(sensor, list):
+        sensor = sensor[0] if sensor else None
+
+    event = {
+        "eventid": eventid,
+        "timestamp": timestamp,
+        "session": session,
+        "sensor": sensor,
+        "src_ip": nested("source", "ip"),
+        "src_port": nested("source", "port"),
+        "dst_ip": nested("destination", "ip"),
+        "dst_port": nested("destination", "port"),
+        "protocol": document.get("protocol"),
+        "username": nested("user", "name"),
+        "password": nested("user", "password"),
+        "input": nested("process", "command_line") or document.get("input"),
+        "url": nested("threat", "indicator", "url"),
+        "shasum": nested("file", "hash", "sha256"),
+        "version": nested("client", "version"),
+    }
+    return {key: value for key, value in event.items() if value is not None}
 
 
 def document_to_record(document: dict[str, Any]) -> PayloadRecord | None:

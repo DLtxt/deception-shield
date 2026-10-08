@@ -1,0 +1,6 @@
+# The Sigma toolchain that converts detections/sigma for Elasticsearch.
+# Pinned because the committed Kibana searches are its output, and CI checks
+# that they still match; change these together with a fresh `make rules-convert`.
+sigma-cli==3.1.0
+pySigma==1.5.1
+pySigma-backend-elasticsearch==2.1.1

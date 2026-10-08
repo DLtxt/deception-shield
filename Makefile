@@ -117,6 +117,64 @@ report: ## Generate a report from indexed telemetry
 	cd $(ANALYSIS_DIR) && .venv/bin/python -m deception_shield.cli analyse \
 		--since $${SINCE:-24h} --format $${FORMAT:-markdown}
 
+# ----------------------------------------------------------- detection as code
+#
+# Corpora and labels live under data/, which git ignores: captured sessions are
+# attack traffic. What reaches the repository is sanitised fixtures.
+
+CORPUS   ?= data/sessions.jsonl
+BASELINE ?= data/benign.jsonl
+LABELS   ?= data/labels.csv
+DS       := cd $(ANALYSIS_DIR) && .venv/bin/python -m deception_shield.cli
+CORPORA   = $(foreach f,$(CORPUS) $(BASELINE),$(if $(wildcard $(f)),"$(CURDIR)/$(f)"))
+
+.PHONY: sessions
+sessions: ## Build the session corpus: make sessions LOGS=data/cowrie, or ES=http://localhost:9200
+	@test -n "$(LOGS)$(ES)" || { echo "usage: make sessions LOGS=path/to/cowrie/logs  or  ES=http://host:port"; exit 2; }
+	$(DS) sessions build $(if $(ES),--elasticsearch "$(ES)" --since $${SINCE:-28d},"$(CURDIR)/$(LOGS)") \
+		-o "$(CURDIR)/$(CORPUS)"
+	$(DS) sessions stats "$(CURDIR)/$(CORPUS)"
+
+.PHONY: baseline
+baseline: ## Add a benign baseline from shell history: make baseline HISTORY=~/.zsh_history HOST=laptop
+	@test -n "$(HISTORY)" -a -n "$(HOST)" || { echo "usage: make baseline HISTORY=path HOST=name"; exit 2; }
+	$(DS) sessions import-history "$(HISTORY)" --host "$(HOST)" --append -o "$(CURDIR)/$(BASELINE)"
+	$(DS) label "$(CURDIR)/$(BASELINE)" --labels "$(CURDIR)/$(LABELS)" --all benign --note "baseline from $(HOST)"
+
+.PHONY: label
+label: ## Label honeypot sessions a family at a time
+	$(DS) label "$(CURDIR)/$(CORPUS)" --labels "$(CURDIR)/$(LABELS)"
+
+.PHONY: rules-check
+rules-check: ## Validate the Sigma rules for the local engine and for Elasticsearch
+	$(DS) rules check
+
+.PHONY: rules-test
+rules-test: ## Run the rules through the fixture gate, as CI does
+	$(DS) rules test
+
+.PHONY: rules-convert
+rules-convert: ## Convert the rules for Kibana and Elastic Security with sigma-cli
+	./scripts/convert-detections.sh
+
+.PHONY: detect
+detect: ## Run the rules over the corpus and list what alerted
+	$(DS) detect $(CORPORA)
+
+.PHONY: evaluate
+evaluate: ## Measure the rules on a held-out window: make evaluate HOLDOUT=2026-W40
+	@test -n "$(HOLDOUT)" || { echo "usage: make evaluate HOLDOUT=2026-W40"; exit 2; }
+	$(DS) evaluate $(CORPORA) --labels "$(CURDIR)/$(LABELS)" --holdout "$(HOLDOUT)" \
+		-o "$(CURDIR)/data/evaluation.md"
+	$(DS) evaluate $(CORPORA) --labels "$(CURDIR)/$(LABELS)" --holdout "$(HOLDOUT)" \
+		--format json -o "$(CURDIR)/data/evaluation.json"
+
+.PHONY: fixtures
+fixtures: ## Export labelled tuning-week sessions as fixtures: make fixtures HOLDOUT=2026-W40
+	@test -n "$(HOLDOUT)" || { echo "usage: make fixtures HOLDOUT=2026-W40 [REPLACE='me=operator']"; exit 2; }
+	$(DS) fixtures export $(CORPORA) --labels "$(CURDIR)/$(LABELS)" --holdout "$(HOLDOUT)" \
+		$(foreach r,$(REPLACE),--replace "$(r)")
+
 # ------------------------------------------------------------------------ checks
 .PHONY: validate
 validate: stack-config ## Validate every configuration file in the repository
@@ -127,10 +185,18 @@ validate: stack-config ## Validate every configuration file in the repository
 	@while IFS= read -r line; do echo "$$line" | jq -e . > /dev/null || exit 1; done \
 		< stack/kibana/dashboards/deception-shield-overview.ndjson
 	@echo "ok   kibana saved objects"
+	@while IFS= read -r line; do echo "$$line" | jq -e . > /dev/null || exit 1; done \
+		< stack/kibana/detections/deception-shield-detections.ndjson
+	@echo "ok   kibana rule searches"
 	@echo "--- YAML ---"
 	@python3 -c "import yaml,glob,sys; \
 		[list(yaml.safe_load_all(open(f))) for f in glob.glob('ansible/**/*.yml', recursive=True)]; \
 		print('ok   ansible playbooks')"
+	@python3 -c "import yaml,glob,sys; \
+		[yaml.safe_load(open(f)) for f in glob.glob('detections/**/*.yml', recursive=True)]; \
+		print('ok   detection rules, pipeline and thresholds')"
+	@python3 -c "import yaml; yaml.safe_load(open('.github/workflows/detections.yml'))" \
+		&& echo "ok   .github/workflows/detections.yml"
 	@echo "--- shell ---"
 	@bash -n capture/capture.sh && echo "ok   capture/capture.sh"
 	@for f in scripts/*.sh; do bash -n "$$f" && echo "ok   $$f"; done

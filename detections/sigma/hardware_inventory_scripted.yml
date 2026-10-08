@@ -1,0 +1,37 @@
+title: Scripted Hardware Inventory
+id: 7ca6d077-c315-4c11-b083-7a8e7548d116
+status: experimental
+description: |
+  Detects pipelines that reduce CPU, memory and disk information to bare figures
+  for a program to read: counting the name lines in /proc/cpuinfo, cutting fields
+  out of free or df with awk, or sizing the ls binary. Bots run these to price a
+  host before deciding whether to install a miner on it. A person checking the
+  same facts reads the formatted output of lscpu, free or df instead.
+references:
+  - https://attack.mitre.org/techniques/T1082/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.discovery
+  - attack.t1082
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_cpu:
+    input|contains:
+      - '/proc/cpuinfo*grep name*wc -l'
+      - '/proc/cpuinfo*grep name*head -n'
+      - '/proc/cpuinfo*grep name*cut '
+      - '/proc/cpuinfo*grep model*grep name'
+  selection_memory:
+    input|contains: 'free -m*grep Mem*awk'
+  selection_disk:
+    input|contains: 'df -h*head -n 2*awk'
+  selection_binary:
+    input|contains: 'ls -lh $(which ls)'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Inventory scripts that parse /proc/cpuinfo, free or df the same way
+level: low

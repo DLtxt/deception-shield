@@ -93,7 +93,10 @@ make replay CAPTURE=captures
 ```
 
 Records carry a fingerprint derived from source, port, timestamp and dataset, so
-a capture replayed into Elasticsearch twice does not duplicate documents.
+a capture replayed into Elasticsearch twice does not duplicate documents. Cowrie
+events add the session, the event type, Cowrie's microsecond timestamp and the
+command, because a pasted script produces several events in one millisecond and
+a coarser fingerprint would drop all but the first.
 
 ## Adding a signature
 
@@ -102,6 +105,34 @@ a capture replayed into Elasticsearch twice does not duplicate documents.
    the name and weight identical so both paths agree.
 3. Add a case to `analysis/tests/test_scoring.py`.
 4. `make test`, then `make provision`.
+
+## Adding or changing a detection rule
+
+1. Edit or add the rule in `detections/sigma/`.
+2. Add the commands it must flag, and the near misses it must not, to
+   `analysis/tests/test_detection_rules.py`.
+3. `make rules-check rules-test test`.
+4. `make rules-convert`, then commit the rule with the regenerated
+   `stack/kibana/detections/` searches.
+5. `make provision` rolls the searches out to the sensors' Kibana.
+
+[`detections.md`](detections.md) has the details, including how the rules are
+kept equivalent in the toolkit and in Elasticsearch.
+
+## The detection gate failed in CI
+
+The run's summary page carries the gate's report: which check failed, and the
+attack fixtures missed or benign fixtures alerted on. Reproduce it locally with
+`make rules-test`.
+
+- **A technique's detection fell** after a rule change: the change stopped
+  catching a fixture it used to. Fix the rule, or, if the fixture shows
+  behaviour the rule should not cover, relabel it.
+- **A rule alerted on a benign fixture**: tighten the rule. If the alert is
+  right and the fixture is wrong, correct the fixture's label instead.
+- **Coverage**: a rule or technique has no fixture exercising it. Add one.
+- **The committed Kibana searches do not match the rules**: run
+  `make rules-convert` and commit the result.
 
 ## Rotating the web interface credentials
 

@@ -1,0 +1,61 @@
+title: Remote Script Piped Into A Shell
+id: 1ad98d15-45be-4231-a59a-f2819005cdd0
+status: experimental
+description: |
+  Detects a script fetched with curl, wget, tftp or ftpget and handed straight
+  to a shell: piped into it, expanded inside sh -c or bash -c, or saved and then
+  run with sh in the same command line. Droppers and miner installers run their
+  second stage this way. Well known vendor installers distributed the same way
+  are filtered out by host name.
+references:
+  - https://attack.mitre.org/techniques/T1059/004/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.execution
+  - attack.t1059.004
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  fetch:
+    input|contains:
+      - 'curl '
+      - 'wget '
+  shell_last:
+    input|endswith:
+      - '|sh'
+      - '| sh'
+      - '|bash'
+      - '| bash'
+      - '| sudo sh'
+      - '| sudo bash'
+      - '| /bin/sh'
+      - '| /bin/bash'
+  shell_with_arguments:
+    input|re: '.*(curl|wget) [^;\&]*\| *(sudo +(-[a-zA-Z]+ +)*)?(/bin/|/usr/bin/)?(ba|da|z|k)?sh[ ;)|\&].*'
+  shell_substitution:
+    input|re: '.*sh +(-[a-zA-Z]+ +)*[\"'']?(\$\(|`|\<\() *(curl|wget) .*'
+  shell_after_fetch:
+    input|re: '.*(curl|wget|tftp|ftpget) .*(;|\&\&) *(sudo +)?(/bin/)?(ba|da|z|k)?sh +[^- ;|\&][^ ;|\&]*.*'
+  filter_optional_vendor_installers:
+    input|contains:
+      - 'get.docker.com'
+      - 'sh.rustup.rs'
+      - 'deb.nodesource.com'
+      - 'rpm.nodesource.com'
+      - 'raw.githubusercontent.com/nvm-sh/'
+      - 'raw.githubusercontent.com/Homebrew/'
+      - 'install.python-poetry.org'
+      - 'get.pnpm.io'
+      - 'bun.sh/install'
+      - 'astral.sh/uv/'
+      - 'ollama.com/install.sh'
+      - 'tailscale.com/install.sh'
+      - 'get.k3s.io'
+      - 'sdk.cloud.google.com'
+  condition: command and ((fetch and shell_last) or shell_with_arguments or shell_substitution or shell_after_fetch) and not 1 of filter_optional_*
+falsepositives:
+  - Software installers distributed as curl | sh from hosts not in the filter
+level: high

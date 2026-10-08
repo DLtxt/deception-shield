@@ -116,6 +116,22 @@ Requiring a shared signature is what keeps the output meaningful. Profiles
 include ports, and without that requirement any two hosts that happened to probe
 the same port would correlate perfectly.
 
+## Session detection
+
+Payload scoring looks at single messages; session detection looks at what an
+intruder did once logged in. Cowrie's events are folded into command sessions,
+and Sigma rules in `detections/sigma/` flag the behaviour that matters:
+planting SSH keys, pricing the host, fetching and running payloads, wiping
+history, scheduling persistence.
+
+The rules are code. They are tested on every commit against labelled attack
+and benign fixtures, converted for Elasticsearch with sigma-cli, and measured
+on a held-out week of captured sessions against a benign baseline taken from
+ordinary administration, since the honeypot itself sees almost none. The
+toolkit matches rules exactly the way Elasticsearch does, so a rule that passes
+CI behaves the same in Kibana. [`detections.md`](detections.md) describes the
+whole loop.
+
 ## Isolation
 
 The sensor is built on the assumption that it will be attacked successfully.

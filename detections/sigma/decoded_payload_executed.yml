@@ -1,0 +1,53 @@
+title: Encoded Payload Decoded Into An Interpreter
+id: c2796f0a-24ea-4e25-a0f1-109afeab7f49
+status: experimental
+description: |
+  Detects base64 encoded content decoded and handed straight to a shell or to
+  eval, the usual way a dropper keeps its commands out of anything that only
+  reads the command line. Decoding on its own is common and benign; decoding into
+  an interpreter is not.
+references:
+  - https://attack.mitre.org/techniques/T1059/004/
+  - https://attack.mitre.org/techniques/T1140/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.execution
+  - attack.t1059.004
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  decode:
+    input|contains:
+      - 'base64 -d'
+      - 'base64 --decode'
+  shell_last:
+    input|endswith:
+      - '|sh'
+      - '| sh'
+      - '|bash'
+      - '| bash'
+      - '| sudo sh'
+      - '| sudo bash'
+      - '| /bin/sh'
+      - '| /bin/bash'
+  shell_with_arguments:
+    input|re: '.*base64 +(-[a-zA-Z]*d[a-zA-Z]*|--decode)[^;\&]*\| *(sudo +)?(/bin/|/usr/bin/)?(ba|da|z|k)?sh[ ;)|\&].*'
+  shell_substitution:
+    input|re: '.*(eval|sh +-c) *[\"'']?(\$\(|`)[^)`]*base64 +(-[a-zA-Z]*d|--decode).*'
+  decoder_call:
+    input|contains:
+      - 'b64decode'
+      - 'decode_base64'
+      - 'base64_decode'
+  executor_call:
+    input|contains:
+      - 'exec('
+      - 'eval('
+      - 'system('
+  condition: command and ((decode and shell_last) or shell_with_arguments or shell_substitution or (decoder_call and executor_call))
+falsepositives:
+  - Deployment scripts that ship configuration as base64 and source it
+level: high

@@ -14,6 +14,7 @@
     - logstash/patterns
     - elasticsearch/index-templates
     - kibana/dashboards
+    - kibana/detections
 
 - name: Install the Logstash pipelines
   ansible.builtin.copy:
@@ -30,9 +31,12 @@
 
 - name: Install the Kibana saved objects
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../stack/kibana/dashboards/"
-    dest: /opt/deception-shield/stack/kibana/dashboards/
+    src: "{{ playbook_dir }}/../stack/kibana/{{ item }}/"
+    dest: "/opt/deception-shield/stack/kibana/{{ item }}/"
     mode: "0644"
+  loop:
+    - dashboards
+    - detections
 
 - name: Wait for Elasticsearch
   ansible.builtin.uri:
@@ -67,12 +71,17 @@
     - "{{ playbook_dir }}/../stack/elasticsearch/index-templates/*.json"
   when: es_health.status is defined and es_health.status == 200
 
+# The dashboards define the data view the rule searches refer to, so they are
+# imported first.
 - name: Import the Kibana saved objects
   ansible.builtin.shell:
     cmd: >-
       curl -sS -X POST "http://127.0.0.1:64296/api/saved_objects/_import?overwrite=true"
       -H "kbn-xsrf: true"
-      --form file=@/opt/deception-shield/stack/kibana/dashboards/deception-shield-overview.ndjson
+      --form file=@/opt/deception-shield/stack/kibana/{{ item }}
+  loop:
+    - dashboards/deception-shield-overview.ndjson
+    - detections/deception-shield-detections.ndjson
   register: kibana_import
   changed_when: "'\"success\":true' in kibana_import.stdout"
   failed_when: false

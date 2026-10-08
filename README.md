@@ -50,6 +50,11 @@ a time window are linked into campaigns through transitive clustering, each with
 a confidence score derived from how alike the members are, how many there are,
 and how specific the shared behaviour is.
 
+**Runs detection as code.** Twelve Sigma rules across six MITRE ATT&CK
+techniques detect what intruders do after logging in. They are versioned in
+this repository, tested in CI on every commit, and converted for Elasticsearch
+with sigma-cli. See [`docs/detections.md`](docs/detections.md).
+
 **Ships as infrastructure.** Terraform builds the isolated VPC, sensors, storage
 and IAM. Ansible configures the capture pipeline, ELK definitions and dashboards.
 Both are idempotent, and re-running them is the mechanism for rolling out change.
@@ -124,8 +129,10 @@ techniques T1059, T1105
 | `stack/` | Compose definition, Logstash pipelines, index templates, dashboards |
 | `capture/` | Capture script, tshark extractor image, systemd units |
 | `analysis/` | Python toolkit and its test suite |
-| `scripts/` | Dashboard import, template application, capture retrieval |
-| `docs/` | Architecture, deployment, analysis and runbook |
+| `detections/` | Sigma rules, sigma-cli pipeline, CI fixtures and gate thresholds |
+| `scripts/` | Dashboard import, template application, capture retrieval, rule conversion |
+| `.github/workflows/` | The detection CI: rule tests, fixture gate, sigma-cli validation |
+| `docs/` | Architecture, deployment, analysis, detections and runbook |
 
 ## Design notes
 
@@ -153,8 +160,9 @@ archive that is treated as hostile data.
 
 ```bash
 make install     # analysis toolkit with development extras
-make test        # 161 tests
+make test        # 584 tests
 make coverage    # with a coverage report
+make rules-test  # the fixture gate CI runs on every commit
 make validate    # every JSON, NDJSON, YAML and shell file in the repository
 ```
 

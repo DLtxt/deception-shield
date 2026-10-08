@@ -1,0 +1,38 @@
+title: Automated Shell Environment Probe
+id: 97484e5a-4412-4ecb-8fe5-69c94a6946d5
+status: experimental
+description: |
+  Detects the probes botnets send to learn what kind of shell they have reached
+  before choosing a payload: uname with every field requested as a separate
+  flag; busybox called with an invented upper case applet name, whose "applet not
+  found" reply confirms busybox is present; a short quoted run of hex escapes
+  that tests whether echo interprets them; and reading a system binary to learn
+  the CPU architecture from its ELF header.
+references:
+  - https://attack.mitre.org/techniques/T1082/
+  - https://github.com/jgamblin/Mirai-Source-Code
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.discovery
+  - attack.t1082
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection_uname:
+    input|contains: 'uname -s -v -n -r -m'
+  selection_busybox:
+    input|re: '.*busybox +[A-Z][A-Z0-9]{2,}.*'
+  selection_echo:
+    input|re: '.*echo +-[a-zA-Z]*e[a-zA-Z]* +[\"''](\\x[0-9a-fA-F]{2}){2,16}[\"''].*'
+  selection_elf_header:
+    input|contains:
+      - 'cat /bin/echo'
+      - 'cat /bin/busybox'
+      - 'head -c 52 /bin/'
+  condition: command and 1 of selection_*
+falsepositives:
+  - Scripts that print uname fields one flag at a time
+level: medium

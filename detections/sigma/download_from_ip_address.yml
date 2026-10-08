@@ -1,0 +1,30 @@
+title: File Download From A Bare IP Address
+id: 4ff0a59a-3a5d-4d7c-b0f4-1c19b54a3f12
+status: experimental
+description: |
+  Detects wget, curl, tftp or ftpget fetching from a public IPv4 address rather
+  than a host name. Droppers in honeypot sessions overwhelmingly pull payloads
+  straight from an address, because short lived attack infrastructure rarely has
+  a domain, while software an administrator installs almost always comes from a
+  named host. Private, loopback and link local addresses are excluded: querying
+  a local service or the cloud metadata endpoint with curl is routine.
+references:
+  - https://attack.mitre.org/techniques/T1105/
+author: Deception Shield
+date: 2026-10-07
+tags:
+  - attack.command-and-control
+  - attack.t1105
+logsource:
+  product: cowrie
+detection:
+  command:
+    eventid: cowrie.command.input
+  selection:
+    input|re: '.*(wget|curl|tftp|ftpget)[^;|\&]*(://| |\@)[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}.*'
+  filter_main_local:
+    input|re: '.*(://| |\@)(127|10|169\.254|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9].*'
+  condition: command and selection and not filter_main_local
+falsepositives:
+  - Administrators fetching files from their own servers by public address
+level: high
